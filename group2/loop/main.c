@@ -88,8 +88,13 @@ void main( void )
         #define DELTA_MIN 0x2000
         #define DELTA_MAX 0x6000
 
-       Int16 DataInLeft, DataInRight, DataOutLeft, DataOutRight;
-       short ramp, delta = DELTA_MAX;
+       Int16 lut[32] = {0,3212,6393,9512,12539,15446,18204,20787,23170,25329,27245,28898,30273,31356,32137,32609,32767,32609,32137,31356,30273,28898,27245,25329,23170,20787,18204,15446,12539,9512,6393,3212};
+       Int16 DataInLeft, DataInRight;
+       Int16 DataOutLeft, DataOutRight;
+       Uint16 i, s;
+       Uint16 gain = 1;
+       Int32 y;
+       short ramp, delta = DELTA0;
        while(1) {
                 	/* Read Digital audio */
                 	while((Rcv & I2S0_IR) == 0);  // Wait for interrupt pending flag
@@ -109,7 +114,18 @@ void main( void )
     				DataOutRight = ramp;			// loop right channel samples
     				ramp += delta;
 
+    				i = (ramp>>10) & 0x001F;
 
+    				y = lut[i] * gain;
+
+
+
+    				y = y>>16;
+    				if (ramp < 0){
+                        y = -y;
+                    }
+
+    				DataOutLeft = y;
 //--------------------------------------------------------------------------------------------------------------------
 // Your program here!!!
 //--------------------------------------------------------------------------------------------------------------------
