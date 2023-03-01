@@ -129,7 +129,8 @@ void main( void )
                     }
 
     				DataOutLeft = y;
-                    DataOutRight = DataInRight;            // loop right channel samples
+                    DataOutRight = ramp;            // loop right channel samples
+                    DataOutRight = DataInRight;
 
 //--------------------------------------------------------------------------------------------------------------------
 // Your program here!!!
