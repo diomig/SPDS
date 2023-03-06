@@ -96,9 +96,9 @@ void main( void )
        Int16 lut[32] = {0,3212,6393,9512,12539,15446,18204,20787,23170,25329,27245,28898,30273,31356,32137,32609,32767,32609,32137,31356,30273,28898,27245,25329,23170,20787,18204,15446,12539,9512,6393,3212};
        Int16 DataInLeft, DataInRight;
        Int16 DataOutLeft, DataOutRight;
-       Uint16 i, s;
-       Int16 gain = 1;
-       Int16 y;
+       Int16 i, f;
+       Int16 gain;
+       Int16 y, y1, y2;
        short ramp, delta = DELTA0;
        while(1) {
                 	/* Read Digital audio */
@@ -115,22 +115,30 @@ void main( void )
 //--------------------------------------------------------------------------------------------------------------------
 //DataOutLeft = DataInLeft;			// loop left channel samples
 
-    				delta = DELTA0 + (DataInRight >> 2);
+    				//delta = DELTA0 + (DataInRight >> 2);
 
     				ramp += delta;
 
     				i = (ramp>>10) & 0x001F;
+    				f = (ramp<<5)  & 0x7FFF;
     				gain = 0x4000; // 16384   ---> 1/2  in Q15
-    				y = (((long)lut[i] * gain)<<1)>>16; // * gain;
+    				//DataOutRight = (((long)lut[i] * gain)<<1)>>16; // * gain;
 
+    				y1 = lut[i];
+    				y2 = lut[i+1];
+
+    				y = (((long)(y2-y1) * f)<<1)>>16;
+    				y = y1 + y;
 
     				if (ramp < 0){
                         y = -y;
+                        y1=-y1;
                     }
 
     				DataOutLeft = y;
-                    DataOutRight = ramp;            // loop right channel samples
-                    DataOutRight = DataInRight;
+                    DataOutRight = y1;
+                    //DataOutRight = ramp;            // loop right channel samples
+                    //DataOutRight = DataInRight;
 
 //--------------------------------------------------------------------------------------------------------------------
 // Your program here!!!
