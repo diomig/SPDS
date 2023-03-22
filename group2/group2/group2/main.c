@@ -18,8 +18,33 @@ extern Int16 AIC3204_rset( Uint16 regnum, Uint16 regval);
 #define DELTA_MIN 0x2000
 #define DELTA_MAX 0x6000
 
+#define KB 2391
+#define a1_IIR_2kHz 21479
+#define a1_IIR_4kHz 0
+#define a1_IIR_6kHz -21479
 
+#define alpha_fc_10 32640 //0.99608837  (Q15)
+#define alpha_fc_100 31530 //0.962213946  (Q15)
 typedef Int16 fixed16;
+
+
+
+
+Int16 yn=0, yn1=0, yn2=0;
+Int16 xn=0, xn1=0, xn2=0;
+Int16 e;
+Int16 i, f;
+Int16 gain;
+Int16 y, y1, y2;
+short ramp;
+Int16 Kf, ef;
+
+
+
+Int16 iir_filter();
+Int16 loop_filter(Int16 xD, Int16 e);
+Int16 nco(Int16 delta);
+Int16 phase_detector(Int16 x, Int16 xo);
 
 /* ------------------------------------------------------------------------ *
  *                                                                          *
@@ -93,19 +118,12 @@ void main( void )
 
 
 
-#define KB 2391
-       Int16 lut[32] = {0,3212,6393,9512,12539,15446,18204,20787,23170,25329,27245,28898,30273,31356,32137,32609,32767,32609,32137,31356,30273,28898,27245,25329,23170,20787,18204,15446,12539,9512,6393,3212};
+
        Int16 DataInLeft, DataInRight;
        Int16 DataOutLeft, DataOutRight;
-       Int16 i, f;
-       Int16 gain;
-       Int16 y, y1, y2;
-       short ramp, delta = DELTA0;
-       Int16 Kf, ef;
-       Int16 a1, a2=-27987, b0=KB, b2=-KB;
-       Int16 yn=0, yn1=0, yn2=0;
-       Int16 xn=0, xn1=0, xn2=0;
 
+
+       Int16 xD, xo;
 
        while(1) {
                     /* Read Digital audio */
@@ -120,49 +138,23 @@ void main( void )
 //--------------------------------------------------------------------------------------------------------------------
  // Your program here!!!
 //--------------------------------------------------------------------------------------------------------------------
-/*
-                    ramp += delta;
-
-                    i = (ramp>>10) & 0x001F;
-                    f = (ramp<<5)  & 0x7FFF;
-                    gain = 0x4000; // 16384   ---> 1/2  in Q15
-                    //DataOutRight = (((long)lut[i] * gain)<<1)>>16; // * gain;
-
-                    y1 = lut[i];
-                    y2 = lut[i+1];
-
-                    y = (((long)(y2-y1) * f)<<1)>>16;
-                    y = y1 + y;
-
-                    if (ramp < 0){
-                        y = -y;
-                        y1=-y1;
-                    }
-
-                    DataOutLeft = y;
-                    DataOutRight = y1;
-                    //DataOutRight = ramp;            // loop right channel samples
-                    //DataOutRight = DataInRight;
-
-  */
-                    a1 = -21479;//2kHz->21479    6kHz->-21479
 
                     xn = DataInRight;
 
 
+                    xo = nco(e);
+                    xD = phase_detector(xn, xo);
 
-                    yn = (((((long)a1*yn1)<<1) + (long)a2*yn2 + (long)b0*xn + (long)b2*xn2)<<1)>>16;
-//                    yn = (((long)b0*xn + (long)b2*xn2)<<1)>>16;
-                    xn2 = xn1;
-                    xn1 = xn;
-                    yn2 = yn1;
-                    yn1 = yn;
+                    e=loop_filter(xD, e);
+
+
+
 
                     DataOutRight = yn;
                     //ef = DataInRight;
                     //Kf = (((long)ef * (-25736))<<1)>>16; //Q14
 
-
+                    //yn = iir_filter();
 //--------------------------------------------------------------------------------------------------------------------
 // Your program here!!!
 //--------------------------------------------------------------------------------------------------------------------
@@ -173,12 +165,61 @@ void main( void )
 
 
 
+Int16 iir_filter() {
+    Int16 a1, a2=-27987, b0=KB, b2=-KB;
+
+    a1 = a1_IIR_4kHz;
+
+
+    yn = (((((long)a1*yn1)<<1) + (long)a2*yn2 + (long)b0*xn + (long)b2*xn2)<<1)>>16;
+    xn2 = xn1;
+    xn1 = xn;
+    yn2 = yn1;
+    yn1 = yn;
+
+    return yn;
+
+}
+
+
+Int16 loop_filter(Int16 xD, Int16 e) { //receive previous value of e (e[n-1]) and current value of xD
+    Int16 alpha = alpha_fc_100;
+    Int16 aux = 0x7FFF-alpha;  //1-alpha in Q15
+
+    return ((((long)alpha*e +(long)xD*(aux))<<1)>>16);
+}
 
 
 
+Int16 nco(Int16 delta){
+    Int16 lut[32] = {0,3212,6393,9512,12539,15446,18204,20787,23170,25329,27245,28898,30273,31356,32137,32609,32767,32609,32137,31356,30273,28898,27245,25329,23170,20787,18204,15446,12539,9512,6393,3212};
+    Int16 y, y1, y2;
+    ramp += delta;
+
+    i = (ramp>>10) & 0x001F;
+    f = (ramp<<5)  & 0x7FFF;
+    gain = 0x4000; // 16384   ---> 1/2  in Q15
+    //DataOutRight = (((long)lut[i] * gain)<<1)>>16; // * gain;
+
+    y1 = lut[i];
+    y2 = lut[i+1];
+
+    y = (((long)(y2-y1) * f)<<1)>>16;
+    y = y1 + y;
+
+    if (ramp < 0){
+        y = -y;
+    }
+
+
+    return y;
+}
 
 
 
+Int16 phase_detector(Int16 x, Int16 xo){
+    return ((((long)x*xo)<<1)>>16);
+}
 
 
 
