@@ -1,0 +1,1 @@
+"./aic3204_test.obj" "./main.obj" "../C5515.cmd" -lusbstk5515bsl.lib -llibc.a 
