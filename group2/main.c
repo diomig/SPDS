@@ -19,19 +19,23 @@ extern Int16 AIC3204_rset( Uint16 regnum, Uint16 regval);
 #define DELTA_MAX 0x6000
 
 #define KB 2391
-#define a1_IIR_2kHz 21479
+#define a1_IIR_2kHz 21479   // 1.311033 [Q15]
 #define a1_IIR_4kHz 0
-#define a1_IIR_6kHz -21479
+#define a1_IIR_6kHz -21479  // -1.311033 [Q15]
 
-#define alpha_fc_10 32640 //0.99608837  (Q15)
-#define alpha_fc_100 31530 //0.962213946  (Q15)
+#define alpha_fc_10 32640   //0.99608837  [Q15]
+#define alpha_fc_100 31530  //0.962213946  [Q15]
+
+#define neg_pi_over_2 (-25736) // -pi/2 = -1.5708  [Q14]
 typedef Int16 fixed16;
 
 
 
 
-Int16 yn=0, yn1=0, yn2=0;
-Int16 xn=0, xn1=0, xn2=0;
+//Int16 yn=0, yn1=0, yn2=0;
+//Int16 xn=0, xn1=0, xn2=0;
+
+Int16 xn, yn;
 Int16 e;
 Int16 i, f;
 Int16 gain;
@@ -41,7 +45,7 @@ Int16 Kf, ef;
 
 
 void dsk_config(void);
-Int16 iir_filter();
+Int16 iir_filter(Int16 ef);
 Int16 loop_filter(Int16 xD, Int16 e);
 Int16 nco(Int16 error);
 Int16 phase_detector(Int16 x, Int16 xo);
@@ -77,21 +81,18 @@ void main( void )
 
             xn = DataInRight;
 
-
+//DPLL
             xo = nco(e);
             xD = phase_detector(xn, xo);
-
             e = loop_filter(xD, e);
 
 
+//IIR Bandpass Filter
+            yn = iir_filter(e);
 
+            DataOutRight = xo;
+            DataOutLeft = yn;
 
-            DataOutRight = e;
-            DataOutLeft = xo;
-            //ef = DataInRight;
-            //Kf = (((long)ef * (-25736))<<1)>>16; //Q14
-
-            //yn = iir_filter();
 //--------------------------------------------------------------------------------------------------------------------
 // Your program here!!!
 //--------------------------------------------------------------------------------------------------------------------
@@ -102,18 +103,22 @@ void main( void )
 
 
 
-Int16 iir_filter() {
+Int16 iir_filter(Int16 ef) {
+    static Int16 yn1=0, yn2=0;
+    static Int16 xn1=0, xn2=0;
     Int16 a1, a2=-27987, b0=KB, b2=-KB;
 
-    a1 = a1_IIR_4kHz;
+    long Kf = ((((long)ef * neg_pi_over_2)<<1)>>16); // [Q15], as long as |ef|<0.5
 
+    a1 = (((Kf * (0x7FFF-KB))<<1)>>16); //a1 = 2*Kf*(1-KB)  [Q14]
+                                        //by storing Kf*(1-KB) in Q14 instead of Q15, we're multiplying by 2
 
     yn = (((((long)a1*yn1)<<1) + (long)a2*yn2 + (long)b0*xn + (long)b2*xn2)<<1)>>16;
     xn2 = xn1;
     xn1 = xn;
     yn2 = yn1;
     yn1 = yn;
-
+//todo:use static variables for samples
     return yn;
 
 }
@@ -131,7 +136,8 @@ Int16 loop_filter(Int16 xD, Int16 e) { //receive previous value of e (e[n-1]) an
 Int16 nco(Int16 error){
     Int16 lut[33] = {0,3212,6393,9512,12539,15446,18204,20787,23170,25329,27245,28898,30273,31356,32137,32609,32767,32609,32137,31356,30273,28898,27245,25329,23170,20787,18204,15446,12539,9512,6393,3212,0};
     Int16 y, y1, y2;
-    Int16 Ko = 8192; //  Ko = 0.25   [Q15]
+    //Int16 Ko = 8192;  //  Ko = 0.25   [Q15]
+    Int16 Ko = 10240;   //  Ko = 0.3125 [Q15]
     Int16 delta = DELTA0 + ((((long)error * Ko)<<1)>>16);
 
     ramp += delta;
