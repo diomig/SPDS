@@ -1,0 +1,56 @@
+B = 400;
+fs = 16000;
+KB = 1 / (1 + cot(pi * B/fs));
+hold off
+
+%% f0 = 2kHz
+f0 = 2000;
+Kf = cos(2*pi * f0/fs)
+a1 = 2*Kf*(1-KB);
+
+b = [KB 0 -KB]
+a = [1 -a1 1-2*KB]
+
+%[h, w] = 
+hold
+freqz(b, a, 100)
+
+
+% plot(w/pi,20*log10(abs(h)))
+% ax = gca;
+% 
+% xlabel('Normalized Frequency (\times\pi rad/sample)')
+% ylabel('Magnitude (dB)')
+
+hold on
+%% f0 = 4kHz
+f0 = 4000;
+Kf = cos(2*pi * f0/fs)
+a1 = 2*Kf*(1-KB);
+
+b = [KB 0 -KB]
+a = [1 -a1 1-2*KB]
+hold on
+freqz(b, a, 100)
+
+hold on
+%% f0 = 6kHz
+f0 = 6000;
+Kf = cos(2*pi * f0/fs)
+a1 = 2*Kf*(1-KB);
+
+b = [KB 0 -KB]
+a = [1 -a1 1-2*KB]
+
+freqz(b, a, 100)
+
+hold all
+
+
+
+lines = findall(gcf,'type','line');
+
+lines(1).Color = 'red'
+lines(2).Color = 'green'
+lines(3).Color = 'red'
+lines(4).Color = 'green'
