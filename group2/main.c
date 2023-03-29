@@ -106,6 +106,7 @@ void main( void )
 Int16 iir_filter(Int16 ef) {
     static Int16 yn1=0, yn2=0;
     static Int16 xn1=0, xn2=0;
+    Int16 yn;
     Int16 a1, a2=-27987, b0=KB, b2=-KB;
 
     long Kf = ((((long)ef * neg_pi_over_2)<<1)>>16); // [Q15], as long as |ef|<0.5
@@ -118,14 +119,13 @@ Int16 iir_filter(Int16 ef) {
     xn1 = xn;
     yn2 = yn1;
     yn1 = yn;
-//todo:use static variables for samples
     return yn;
 
 }
 
 
 Int16 loop_filter(Int16 xD, Int16 e) { //receive previous value of e (e[n-1]) and current value of xD
-    Int16 alpha = alpha_fc_10;
+    Int16 alpha = alpha_fc_100;
     Int16 aux = 0x7FFF-alpha;  //1-alpha in Q15
 
     return ((((long)alpha*e +(long)xD*(aux))<<1)>>16);
@@ -137,10 +137,10 @@ Int16 nco(Int16 error){
     Int16 lut[33] = {0,3212,6393,9512,12539,15446,18204,20787,23170,25329,27245,28898,30273,31356,32137,32609,32767,32609,32137,31356,30273,28898,27245,25329,23170,20787,18204,15446,12539,9512,6393,3212,0};
     Int16 y, y1, y2;
     //Int16 Ko = 8192;  //  Ko = 0.25   [Q15]
-    Int16 Ko = 10240;   //  Ko = 0.3125 [Q15]
-    Int16 delta = DELTA0 + ((((long)error * Ko)<<1)>>16);
+    Int16 Ko = 24381;   //  Ko = 0.744 [Q15]
+    Int16 delta = DELTA0 + ((((long)error * Ko)<<1)>>16);   //[Q15], as long as error is in [-0.5, 0.5]
 
-    ramp += delta;
+    ramp += delta;  //[Q15]
 
     i = (ramp>>10) & 0x001F;
     f = (ramp<<5)  & 0x7FFF;
@@ -167,6 +167,17 @@ Int16 phase_detector(Int16 x, Int16 xo){
     return ((((long)x*xo)<<1)>>16);
 }
 
+
+
+
+Int16 integrator(Int16 e) {
+    static ei = 0;
+    ei += e;
+    return ei;
+}
+
+Int16 decimator(Int16 in, Int16 M) {
+}
 
 
 void dsk_config(void) {
