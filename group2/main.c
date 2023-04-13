@@ -3,6 +3,10 @@
  *  All rights reserved. Property of Spectrum Digital Incorporated.
  */
 
+
+//#define LINEAR_Kf
+
+
 #define AIC3204_I2C_ADDR 0x18
 #include "usbstk5515.h"
 #include "usbstk5515_gpio.h"
@@ -35,20 +39,26 @@ typedef Int16 fixed16;
 //Int16 yn=0, yn1=0, yn2=0;
 //Int16 xn=0, xn1=0, xn2=0;
 
+Int16 test;
 Int16 xn, yn;
-Int16 e;
 Int16 i, f;
 Int16 gain;
 Int16 y, y1, y2;
 short ramp;
-Int16 Kf, ef;
+Int16 beta = 23570;
+
 
 
 void dsk_config(void);
 Int16 iir_filter(Int16 ef);
+Int16 iir_filter_test(Int16 ef);
 Int16 loop_filter(Int16 xD, Int16 e);
 Int16 nco(Int16 error);
 Int16 phase_detector(Int16 x, Int16 xo);
+long integrator(Int16 e);
+Int16 decimator_and_comb(long in, Int16 M);
+Int16 comb(long xn);
+Int16 cic_filter(Int16 e, Int16 M);
 
 /* ------------------------------------------------------------------------ *
  *                                                                          *
@@ -64,6 +74,8 @@ void main( void )
 
 
        Int16 xD, xo;
+
+       Int16 ex, e, ef;
 
        while(1) {
             /* Read Digital audio */
@@ -81,16 +93,22 @@ void main( void )
 
             xn = DataInRight;
 
-//DPLL
+            //DPLL
             xo = nco(e);
             xD = phase_detector(xn, xo);
             e = loop_filter(xD, e);
 
+            ex = (((long)e * beta)<<2)>>16;
+            //CIC filter
+            //xo = integrator(e);
+            ef = decimator_and_comb(integrator(ex), 32);
+            //ef = cic_filter(ex, 8192);
+            //ex = (((long)ef * 18849)<<2)>>16;
+            //IIR Bandpass Filter
+            yn = iir_filter(ef);
+            //test = iir_filter_test(ef);
 
-//IIR Bandpass Filter
-            yn = iir_filter(e);
-
-            DataOutRight = xo;
+            DataOutRight = e;
             DataOutLeft = yn;
 
 //--------------------------------------------------------------------------------------------------------------------
@@ -104,6 +122,38 @@ void main( void )
 
 
 Int16 iir_filter(Int16 ef) {
+    static Int16 yn1=0, yn2=0;
+    static Int16 xn1=0, xn2=0;
+    Int16 yn;
+    Int16 a1, a2=-27987, b0=KB, b2=-KB;
+
+    const Int16 sine[33] = {0,3212,6393,9512,12539,15446,18204,20787,23170,25329,27245,28898,30273,31356,32137,32609,32767,32609,32137,31356,30273,28898,27245,25329,23170,20787,18204,15446,12539,9512,6393,3212,0};
+
+#ifdef LINEAR_Kf
+    long Kf = (((((long)ef * neg_pi_over_2)<<1)<<1)>>16); // [Q15], as long as |ef|<0.5
+#else
+    Int16 m = ((ef>>1) >> 10) & 0x001F;
+    Int16 f = ((ef>>1) << 5) & 0x7FFF;
+    long Kf = (((long)(sine[m+1]-sine[m]) * f)<<1)>>16;
+    Kf = Kf + sine[m];
+    if (ef>0) {Kf = -Kf;}
+#endif
+
+
+    a1 = (((Kf * (0x7FFF-(KB)))<<1)>>16); //a1 = 2*Kf*(1-KB)  [Q14]
+                                        //by storing Kf*(1-2*KB) in Q14 instead of Q15, we're multiplying by 2
+    //a1 = -23430;
+    yn = ((((((long)a1*yn1)<<1) + (long)a2*yn2 + (long)b0*xn + (long)b2*xn2)<<1)>>16);
+    xn2 = xn1;
+    xn1 = xn;
+    yn2 = yn1;
+    yn1 = yn;
+    return yn;
+
+}
+
+
+Int16 iir_filter_test(Int16 ef) {
     static Int16 yn1=0, yn2=0;
     static Int16 xn1=0, xn2=0;
     Int16 yn;
@@ -157,7 +207,6 @@ Int16 nco(Int16 error){
         y = -y;
     }
 
-
     return y;
 }
 
@@ -168,16 +217,44 @@ Int16 phase_detector(Int16 x, Int16 xo){
 }
 
 
+//CIC Filter
 
-
-Int16 integrator(Int16 e) {
-    static ei = 0;
-    ei += e;
+long integrator(Int16 e) {
+    static long ei = 0;
+    ei += (long)e;
     return ei;
 }
 
-Int16 decimator(Int16 in, Int16 M) {
+Int16 decimator_and_comb(long in, Int16 M) {
+    static Int16 counter = 0;
+    static Int16 out;
+
+    if ((--counter)>0) {return out;}
+
+    counter = M;
+    out = comb(in);
+
+    return out;
 }
+
+Int16 comb(long xn) {
+    static long xn1 = 0;
+    long out = xn - xn1;
+    xn1 = xn;
+    return (Int16)(out>>5);
+}
+
+Int16 cic_filter(Int16 e, Int16 M) {
+    Int16 aux;
+    //operates at fs
+    aux = integrator(e);
+
+    //operates at fs/M
+    return decimator_and_comb(aux, M);
+}
+
+
+
 
 
 void dsk_config(void) {
